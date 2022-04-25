@@ -6,6 +6,19 @@ import torch.nn.functional as F
 from torch.autograd import Variable
 
 
+class KLLoss(nn.Module):
+    def __init__(self, reduction='sum'):
+        """
+        KL loss
+        """
+        self.reduction = reduction
+
+    def forward(self, inputs, targets):
+        kl = F.kl_div(inputs.softmax(dim=-1).log(), targets.softmax(dim=-1), reduction=self.reduction)
+
+        return kl
+
+
 class FocalLoss(nn.Module):
     r"""
         This criterion is a implemenation of Focal Loss, which is proposed in

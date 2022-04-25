@@ -17,7 +17,7 @@ import os
 import shutil
 import sys
 from tqdm import tqdm
-from lotclass_model import LOTClassModel
+from _lotclass_model import LOTClassModel
 import warnings
 import pickle as pkl
 
