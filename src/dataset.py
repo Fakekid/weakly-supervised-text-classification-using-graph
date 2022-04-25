@@ -4,9 +4,9 @@ from torch.utils.data import Dataset
 
 
 class ClsDataset(Dataset):
-    def __init__(self, df, tokenizer, max_length):
+    def __init__(self, df, tokenizer, max_seq_len):
         self.df = df
-        self.max_len = max_length
+        self.max_len = max_seq_len
         self.tokenizer = tokenizer
         self.text = df['text'].values
         if 'label' in df.columns:
@@ -22,8 +22,8 @@ class ClsDataset(Dataset):
             text,
             truncation=True,
             add_special_tokens=True,
-            max_length=self.max_len,
-            padding='max_length'
+            max_seq_len=self.max_len,
+            padding='max_seq_len'
         )
 
         input_ids = inputs['input_ids']

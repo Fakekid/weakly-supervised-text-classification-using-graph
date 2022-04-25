@@ -116,20 +116,20 @@ class FinetuneTrainer:
 
         return loss
 
-    def train(self, ptm_name, num_labels, data, output_path, x_col='text', y_col='label',
-              batch_size=128, max_seq_len=128, model_type='cls', device='cuda',
-              weight_decay=0.01, learning_rate=1e-5, warmup_ratio=0.1, label_balance=None,
+    def train(self, ptm_name, num_labels, data, output_path,
+              batch_size=128, max_seq_len=128, device='cuda',
+              weight_decay=0.01, learning_rate=1e-5, warmup_ratio=0.1,
               val_data=None, epoch=10):
         """
         训练模型
         """
         tokenizer = AutoTokenizer.from_pretrained(ptm_name)
-        dataset = ClsDataset(data, tokenizer=tokenizer, max_seq_len=max_seq_len, x_col=x_col, y_col=y_col)
+        dataset = ClsDataset(data, tokenizer=tokenizer, max_seq_len=max_seq_len)
         loader = DataLoader(dataset, batch_size=batch_size)
 
         loader_valid = None
         if val_data is not None:
-            dataset_valid = ClsDataset(val_data, tokenizer=tokenizer, max_seq_len=max_seq_len, x_col=x_col, y_col=y_col)
+            dataset_valid = ClsDataset(val_data, tokenizer=tokenizer, max_seq_len=max_seq_len)
             loader_valid = DataLoader(dataset_valid, batch_size=batch_size)
 
         # 释放显存占用
@@ -235,7 +235,7 @@ class FinetuneTrainer:
 
                 model_to_save.save_pretrained(model_save_path)
 
-    def infer_for_soft_label(self, dataset_loader):
+    def infer(self, dataset_loader):
         """
         inference function for building soft-label
         needs to predict all documents' class-prob
