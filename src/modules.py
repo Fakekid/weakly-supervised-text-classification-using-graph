@@ -6,15 +6,22 @@ import sys
 
 class ClsModel(BertPreTrainedModel):
 
-    def __init__(self, config):
+    def __init__(self, num_labels, ptm_name, config=None):
         super().__init__(config)
-        self.num_labels = config.num_labels
-        self.bert = BertModel(config, add_pooling_layer=False)
+        self.num_labels = num_labels
+        self.bert = BertModel.from_pretrained(ptm_name)
 
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+        if config is not None:
+            hidden_dropout_prob = config.hidden_dropout_prob
+            hidden_size = config.hidden_size
+        else:
+            hidden_dropout_prob = self.bert.config.hidden_dropout_prob
+            hidden_size = self.bert.config.hidden_size
+
+        self.dropout = nn.Dropout(hidden_dropout_prob)
+        self.dense = nn.Linear(hidden_size, hidden_size)
+        self.classifier = nn.Linear(hidden_size, num_labels)
         self.activation = nn.Tanh()
-        self.classifier = nn.Linear(config.hidden_size, config.num_labels)
         self.init_weights()
 
     def forward(self, input_ids, attention_mask=None, token_type_ids=None,

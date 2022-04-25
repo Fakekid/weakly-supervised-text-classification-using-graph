@@ -3,6 +3,7 @@
 import os
 import numpy as np
 import torch
+from torch import nn
 from torch.utils.data import DataLoader
 from torch.backends import cudnn
 from transformers import (
@@ -13,51 +14,17 @@ from transformers import (
     DataCollatorForLanguageModeling,
     DataCollatorForWholeWordMask
 )
+from .loss import KLLoss
 
 from tqdm import tqdm
 from prettytable import PrettyTable
 
-from ..modules import BertForSequenceClassification, BertForTokenClassification
-from ..modules.tokenizer import get_tokenizer
+from .modules import ClsModel
+from transformers import AutoTokenizer
+
 from ..evaluate import multi_cls_metrics
 from ..dataset_po import ClsDataset
 from ..modules.optimizer import build_optimizer
-
-
-def build_finetune_model(ptm_name, num_labels, type='cls'):
-    """
-
-        Args:
-            ptm_name: str value, pretrained model's name or local directory
-            num_labels: int value, number of categories
-            type: str value, downstream task type, default 'cls', current only support 'cls'、'tag'
-
-        Returns:
-            transformer model
-        """
-    if type == 'cls':
-        model = BertForSequenceClassification.from_pretrained(ptm_name, num_labels=num_labels)
-    elif type == 'tag':
-        model = BertForTokenClassification.from_pretrained(ptm_name, num_labels=num_labels)
-    else:
-        raise ValueError('暂不支持cls和tag以外的模型')
-    return model
-
-
-def build_pretrain_model(model_name):
-    """
-
-    Args:
-        model_name:
-
-    Returns:
-
-    """
-    model_config = BertConfig.from_pretrained(model_name)
-
-    model = BertForMaskedLM.from_pretrained(pretrained_model_name_or_path=model_name,
-                                            config=model_config)
-    return model
 
 
 class PretrainTrainer:
@@ -120,27 +87,56 @@ class FinetuneTrainer:
 
     """
 
-    def __init__(self, **kwargs):
+    def __init__(self, ptm_name, **kwargs):
         for k, v in kwargs.items():
             print(f'设置 {k}={v}')
             exec(f'self.{k} = {v}')
+            self.kl_loss = KLLoss(reduction='sum')
+            self.model = ClsModel.from_pretrained(ptm_name)
+
+    def prepare_soft_label_data(self, rank, model, idx):
+        target_num = min(self.world_size * self.train_batch_size * self.update_interval * self.accum_steps,
+                         len(self.train_data["input_ids"]))
+        if idx + target_num >= len(self.train_data["input_ids"]):
+            select_idx = torch.cat((torch.arange(idx, len(self.train_data["input_ids"])),
+                                    torch.arange(idx + target_num - len(self.train_data["input_ids"]))))
+        else:
+            select_idx = torch.arange(idx, idx + target_num)
+        assert len(select_idx) == target_num
+        idx = (idx + len(select_idx)) % len(self.train_data["input_ids"])
+        select_dataset = {"input_ids": self.train_data["input_ids"][select_idx],
+                          "attention_masks": self.train_data["attention_masks"][select_idx]}
+        dataset_loader = self.make_dataloader(rank, select_dataset, self.eval_batch_size)
+        input_ids, input_mask, preds = self.inference(model, dataset_loader, rank, return_type="data")
+        gather_input_ids = [torch.ones_like(input_ids) for _ in range(self.world_size)]
+        gather_input_mask = [torch.ones_like(input_mask) for _ in range(self.world_size)]
+        gather_preds = [torch.ones_like(preds) for _ in range(self.world_size)]
+        dist.all_gather(gather_input_ids, input_ids)
+        dist.all_gather(gather_input_mask, input_mask)
+        dist.all_gather(gather_preds, preds)
+        input_ids = torch.cat(gather_input_ids, dim=0).cpu()
+        input_mask = torch.cat(gather_input_mask, dim=0).cpu()
+        all_preds = torch.cat(gather_preds, dim=0).cpu()
+        weight = all_preds ** 2 / torch.sum(all_preds, dim=0)
+        target_dist = (weight.t() / torch.sum(weight, dim=1)).t()
+        all_target_pred = target_dist.argmax(dim=-1)
+        agree = (all_preds.argmax(dim=-1) == all_target_pred).int().sum().item() / len(all_target_pred)
+        self_train_dict = {"input_ids": input_ids, "attention_masks": input_mask, "labels": target_dist}
+        return self_train_dict, idx, agree
 
     def train(self, ptm_name, num_labels, data, output_path, x_col='text', y_col='label',
               batch_size=128, max_seq_len=128, model_type='cls', device='cuda',
               weight_decay=0.01, learning_rate=1e-5, warmup_ratio=0.1, label_balance=None,
-              val_data=None):
+              val_data=None, epoch=10):
         """
         训练模型
         """
-        epoch = self.epoch
-
-        tokenizer = get_tokenizer(ptm_name)
+        tokenizer = AutoTokenizer.from_pretrained(ptm_name)
         dataset = ClsDataset(data, tokenizer=tokenizer, max_seq_len=max_seq_len, x_col=x_col, y_col=y_col)
         loader = DataLoader(dataset, batch_size=batch_size)
 
-        need_valid = False
+        loader_valid = None
         if val_data is not None:
-            need_valid = True
             dataset_valid = ClsDataset(val_data, tokenizer=tokenizer, max_seq_len=max_seq_len, x_col=x_col, y_col=y_col)
             loader_valid = DataLoader(dataset_valid, batch_size=batch_size)
 
@@ -150,7 +146,8 @@ class FinetuneTrainer:
         train_num = len(loader)
         train_steps = int(train_num * epoch / batch_size) + 1
 
-        model = build_finetune_model(ptm_name, num_labels, type=model_type)
+        model = self.model
+
         optimizer, scheduler = build_optimizer(model, train_steps, learning_rate=learning_rate,
                                                weight_decay=weight_decay, warmup_ratio=warmup_ratio)
         model.to(device)
@@ -165,27 +162,25 @@ class FinetuneTrainer:
             for batch in loader:
                 input_ids = batch['input_ids'].to(device)
                 attention_mask = batch['attention_mask'].to(device)
-                token_type_ids = batch['token_type_ids'].to(device)
+                plabels = batch['plabels'].to(device)
                 labels = batch['labels'].to(device)
 
-                output = model(input_ids=input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids,
-                               labels=labels, label_balance=label_balance, return_dict=True)
-                loss = output['loss']
+                output = model(input_ids=input_ids, attention_mask=attention_mask)
+
+                loss = self.kl_loss(output, plabels)
 
                 optimizer.zero_grad()
                 loss.backward()
-
                 total_loss += loss.item()
-                # cur_avg_loss += loss.item()
-
                 optimizer.step()
-
                 scheduler.step()
                 model.zero_grad()
-
                 global_steps += 1
 
+                # TODO: calculate
+
                 acc = torch.argmax(torch.softmax(output[1], dim=-1), dim=-1) == labels
+
                 if model_type == 'cls':
                     acc = acc.type(torch.float)
                     acc = torch.mean(acc)
@@ -196,7 +191,7 @@ class FinetuneTrainer:
                 bar.set_description('step:{} acc:{} loss:{} lr:{}'.format(
                     global_steps, round(acc.item(), 4), round(loss.item(), 4), round(scheduler.get_lr()[0], 7)))
 
-            if need_valid:
+            if loader_valid is not None:
                 # 每个epoch结束进行验证集评估并保存模型
                 labels = None
                 outputs = None
@@ -258,3 +253,26 @@ class FinetuneTrainer:
                 model_to_save = model.module if hasattr(model, 'module') else model
 
                 model_to_save.save_pretrained(model_save_path)
+
+    def infer_for_soft_label(self, dataset_loader):
+        """
+        inference function for building soft-label
+        needs to predict all documents' class-prob
+        """
+        all_input_ids = []
+        all_input_mask = []
+        all_preds = []
+        for batch in dataset_loader:
+            with torch.no_grad():
+                input_ids = batch[0].to('cuda')
+                input_mask = batch[1].to('cuda')
+                logits = self.model(input_ids,
+                                    token_type_ids=None,
+                                    attention_mask=input_mask)
+                logits = logits[:, 0, :]
+
+                all_input_ids.append(input_ids)
+                all_input_mask.append(input_mask)
+                all_preds.append(nn.Softmax(dim=-1)(logits))
+
+        return all_input_ids, all_input_mask, all_preds
