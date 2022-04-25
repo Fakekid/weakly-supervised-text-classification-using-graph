@@ -87,12 +87,13 @@ class FinetuneTrainer:
 
     """
 
-    def __init__(self, ptm_name, **kwargs):
+    def __init__(self, ptm_name, num_labels, **kwargs):
         for k, v in kwargs.items():
             print(f'设置 {k}={v}')
             exec(f'self.{k} = {v}')
             self.kl_loss = KLLoss(reduction='sum')
-            self.model = ClsModel.from_pretrained(ptm_name)
+            self.model = ClsModel.from_pretrained(ptm_name, num_labels=num_labels)
+            self.tokenizer = AutoTokenizer.from_pretrained(ptm_name)
 
     def calc_q(self, data):
         """
@@ -116,14 +117,14 @@ class FinetuneTrainer:
 
         return loss
 
-    def train(self, ptm_name, num_labels, data, output_path,
+    def train(self, num_labels, data, output_path,
               batch_size=128, max_seq_len=128, device='cuda',
               weight_decay=0.01, learning_rate=1e-5, warmup_ratio=0.1,
               val_data=None, epoch=10):
         """
         训练模型
         """
-        tokenizer = AutoTokenizer.from_pretrained(ptm_name)
+        tokenizer = self.tokenizer
         dataset = ClsDataset(data, tokenizer=tokenizer, max_seq_len=max_seq_len)
         loader = DataLoader(dataset, batch_size=batch_size)
 

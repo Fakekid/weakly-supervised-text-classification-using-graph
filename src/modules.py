@@ -6,7 +6,7 @@ import sys
 
 class ClsModel(BertPreTrainedModel):
 
-    def __init__(self, num_labels, ptm_name, config=None):
+    def __init__(self, ptm_name, num_labels, config=None):
         super().__init__(config)
         self.num_labels = num_labels
         self.bert = BertModel.from_pretrained(ptm_name)

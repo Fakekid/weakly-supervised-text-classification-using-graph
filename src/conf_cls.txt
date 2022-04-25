@@ -1,0 +1,23 @@
+{
+    'num_labels': 2,
+    'use_model': 'bert',
+    'train_data_path': '/chj/jupyter/dev/lianxiaolei/keyword-mode/train_data/channel-classification-5fold.csv',
+    'output_path': 'channel-segment-model',
+    'model_path': 'bert-base-chinese',  # your pretrain model path
+    # 'model_path': '/chj/dev/lianxiaolei/bert_pretrain/mlm_model',  # your pretrain model path
+    'task': 'cls',
+    'batch_size': 64,
+    'num_epochs': 3,
+    'max_seq_len': 32,
+    'kfold': 1,
+    'learning_rate': 5e-5,
+    'alpha': 0.3,
+    'epsilon': 1.0,
+    'adv_k': 3,
+    'emb_name': 'word_embeddings.',
+    'adv': '',
+    'weight_decay': 0.07,
+    'decay_stairs': 10,
+    'device': 'cuda',
+    'loss_type': ''
+}
