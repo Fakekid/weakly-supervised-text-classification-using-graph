@@ -14,6 +14,7 @@ import nltk
 import re
 
 from parallel_processor import process_data
+from nltk.tokenize import word_tokenize
 from nltk.tokenize import TweetTokenizer
 from nltk.tokenize import RegexpTokenizer
 from nltk.corpus import wordnet
@@ -33,13 +34,15 @@ with open('datasets/dbpedia/label_names.txt') as fin:
 
 with open('datasets/dbpedia/train.txt') as fin:
     text = [item.replace('\n', '') for item in fin.readlines()]
+    
+smp_idxs = np.random.randint(0, 5, len(text))
+text = [text[i] for i in range(len(smp_idxs)) if smp_idxs[i] == 0]
 
+# tokenizer = nltk.data.load('tokenizers/punkt/english.pickle')
 
-tokenizer = nltk.data.load('tokenizers/punkt/english.pickle')
+# text = [tokenizer.tokenize(item) for item in tqdm(text)]
 
-text = [tokenizer.tokenize(item) for item in tqdm(text)]
-
-text = list(chain.from_iterable(text))
+# text = list(chain.from_iterable(text))
 
 
 def remove_urls (vTEXT):
@@ -52,11 +55,12 @@ text = [re.sub(r'[^\w\s]',' ', item) for item in tqdm(text)]
 # text = [item.replace('\\', '').replace('<b>', '').replace('</b>', '').replace('#', '') for item in text]
 text[:10]
 
-text = [item for item in text if 5 < len(item) < 300]
+text = [item for item in text if 30 < len(item) < 1000]
 print(f'corpus length {len(text)}')
 
 with open('data/en_names.txt', 'r') as fin:
     en_names = list(map(lambda x: x.replace('\n', ''), fin.readlines()))
+en_names = [item for item in en_names if item not in label_names]
 
 weeks = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday', 
          'January','February','March','April','May','June','July','August','September','October','November','December']
@@ -77,25 +81,24 @@ tweet = TweetTokenizer()
 
 ps = nltk.PorterStemmer()
 
-
 weeks = [item.lower() for item in weeks]
 # weeks = []
+
+stops = weeks + address + en_names
+
+def is_en(s):
+    for uchar in s:
+        if ( uchar >= u'\u0041' and uchar <= u'\u005A' ) or ( uchar >= u'\u0061' and uchar <= u'\u007A'):
+            continue
+        else:
+            return False
+    return True
 
 
 def get_nouns(x):
     nouns = []
     for t in tqdm(x):
-#         doc = spy(t)
-#         noun = set()
-#         for token in doc:
-#             if token.tag_ in ('NN', 'NNP', 'NNS', 'NNPS'):
-#                 if 2 < len(token.text) < 20:
-#                     noun.add(token.text.lower())
-        
-#         blob = TextBlob(t)
-#         noun = [item for item in list(blob.noun_phrases) if 2 < len(item) < 25]
-#         nouns.append(noun)
-
+#         tokens = word_tokenize(t)
         tokens = tweet.tokenize(t)
         pos_tags = nltk.pos_tag(tokens)
 
@@ -104,37 +107,44 @@ def get_nouns(x):
             word = word.lower()
             if len(word) > 30 or len(word) < 3: continue
 #             if (pos == 'NN' or pos == 'NNP' or pos == 'NNS' or pos == 'NNPS' ) \
-            if (pos == 'NN' or pos == 'NNP') \
+            if (pos == 'NN' or pos == 'NNP' or pos == 'NNS' or pos == 'NNPS' or pos == 'VBN' or pos == 'JJ' or pos == 'JJS') \
             and word not in stopwords.words('english') \
-            and word not in weeks \
-            and word not in address \
-            and word not in en_names:
-                noun.add(wnl.lemmatize(word, 'n'))
+            and word not in stops \
+            and is_en(word):
+                noun.add(word)
 #                 noun.add(wnl.lemmatize(word.lower()))
         nouns.append(list(noun))
 
     return nouns
 
 
-nouns = process_data(text, get_nouns, num_workers=20)
-
+nouns = process_data(text, get_nouns, num_workers=26)
 print([' '.join(item) for item in nouns[:10]])
 
 nouns = [item for item in nouns if 10 <= len(item)]
-print(len(nouns))
+print('doc num', len(nouns))
 
 
-def freq_filter(data, min_freq=1):
+def freq_filter(data, min_freq=1, return_cnt=False):
     """
     过滤低频词
     """
     cnter = dict(Counter(list(chain.from_iterable(data))))
     cnter = {k: cnter[k] for k in sorted(cnter, key=lambda x: cnter[x], reverse=True) if cnter[k] > min_freq}
+    
+    if return_cnt:
+        return set(cnter.keys()), cnter
     return set(cnter.keys())
 
 
-all_words = freq_filter(nouns, min_freq=10)
-print(len(all_words))
+all_words, cnter = freq_filter(nouns, min_freq=30, return_cnt=True)
+print('word num', len(all_words))
+
+with open('nouns.pkl', 'wb') as fout:
+        pkl.dump(nouns, fout)
+        
+with open('word_counter_dic.pkl', 'wb') as fout:
+        pkl.dump(cnter, fout)
 
 
 
@@ -150,7 +160,7 @@ for noun in tqdm(nouns):
     for u in noun:
         for v in noun:
             if not w2i.get(u) or not w2i.get(v): continue
-            if u == v: continue
+#             if u == v: continue
             g_mat[w2i[u], w2i[v]] += 1
             g_mat[w2i[v], w2i[u]] += 1
 
@@ -163,13 +173,13 @@ g_nx = nx.from_numpy_array(g_mat)
 
 print('graph sampling...')
 from node2vec import Node2Vec
-node2vec = Node2Vec(g_nx, dimensions=16, walk_length=16, num_walks=40, p=1.4, q=1.6)
+node2vec = Node2Vec(g_nx, dimensions=16, walk_length=16, num_walks=40, p=1., q=1.9)
 # with open('node2vec-model/agnews_noun_n2v_p1.4_q1.2_wl16_nw20_dim16.pkl', 'wb') as fout:
 #     pkl.dump(node2vec, fout)
 
 print('w2v training...')
 model = node2vec.fit(window=9, min_count=1)
-model.save('node2vec-model/dbpedia_n2v_p1.4_q1.6_wl16_nw40_dim16_v2.bin')
+model.save('node2vec-model/dbpedia_n2v_p1_q1_wl16_nw40_dim16.bin')
 
 
 cate_sims = {}
@@ -177,24 +187,17 @@ for ln in label_names:
     print(ln)
     
     ws = []
-    for i, j in model.wv.most_similar(str(w2i[ln]), topn=100):
+    if w2i.get(ln) == None: continue
+    for i, j in model.wv.most_similar(str(w2i[ln]), topn=10000):
         ws.append([i2w[int(i)], j])
         print(i2w[int(i)], j)
     print('-' * 40)
     cate_sims[ln] = ws
 
 
-with open('dbpedia_n2v_cate_sims.pkl', 'wb') as fout:
+with open('dbpedia_n2v_cate_sims_p1q1_wsmp.pkl', 'wb') as fout:
 	pkl.dump(cate_sims, fout)
 
 
 print('all done.')
-
-
-
-
-
-
-
-
 

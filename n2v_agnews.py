@@ -116,7 +116,7 @@ def get_nouns(x):
     return nouns
 
 print('multiprocessing...')
-nouns = process_data(text, get_nouns, num_workers=10)
+nouns = process_data(text, get_nouns, num_workers=24)
 
 print([' '.join(item) for item in nouns[:10]])
 
@@ -140,6 +140,11 @@ print(len(all_words))
 
 w2i = {w: i for i, w in enumerate(all_words)}
 i2w = {v: k for k, v in w2i.items()}
+
+with open('w2i_agnews.pkl', 'wb') as fout:
+    pkl.dump(w2i, fout)
+with open('i2w_agnews.pkl', 'wb') as fout:
+    pkl.dump(i2w, fout)
 
 
 g_mat = np.zeros([len(all_words), len(all_words)])
@@ -169,7 +174,7 @@ node2vec = Node2Vec(g_nx, dimensions=16, walk_length=16, num_walks=40, p=1.4, q=
 
 print('w2v training...')
 model = node2vec.fit(window=9, min_count=1)
-model.save('node2vec-model/agnews_noun_n2v_p1.4_q1.6_wl16_nw40_dim16_v3.bin')
+model.save('node2vec-model/agnews_noun_n2v_p1.4_q1.6_wl16_nw40_dim16_v4.bin')
 
 
 cate_sims = {}
@@ -177,7 +182,7 @@ for ln in label_names:
     print(ln)
     
     ws = []
-    for i, j in model.wv.most_similar(str(w2i[ln]), topn=100):
+    for i, j in model.wv.most_similar(str(w2i[ln]), topn=1000):
         ws.append([i2w[int(i)], j])
         print(i2w[int(i)], j)
     print('-' * 40)
