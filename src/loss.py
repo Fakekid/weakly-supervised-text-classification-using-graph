@@ -14,14 +14,7 @@ class KLLoss(nn.Module):
         self.reduction = reduction
 
     def forward(self, logits, targets):
-        p = nn.Softmax(dim=-1)(logits)
-        q_up = p ** 2 / torch.sum(p, dim=0)
-        target_dist = (p.t() / torch.sum(p, dim=1)).t()
-        all_target_pred = target_dist.argmax(dim=-1)
-        agree = (all_preds.argmax(dim=-1) == all_target_pred).int().sum().item() / len(all_target_pred)
-        x = nn.LogSoftmax(dim=-1)(logits)
-        kl = nn.KLDivLoss(reduction=self.reduction)
-        kl = F.kl_div(x.softmax(dim=-1).log(), targets.softmax(dim=-1), reduction=self.reduction)
+        kl = F.kl_div(logits.softmax(dim=-1).log(), targets.softmax(dim=-1), reduction=self.reduction)
 
         return kl
 

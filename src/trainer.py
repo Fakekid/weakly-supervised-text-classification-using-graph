@@ -22,9 +22,9 @@ from prettytable import PrettyTable
 from .modules import ClsModel
 from transformers import AutoTokenizer
 
-from ..evaluate import multi_cls_metrics
-from ..dataset_po import ClsDataset
-from ..modules.optimizer import build_optimizer
+from .evaluate import multi_cls_metrics
+from .dataset import ClsDataset
+from .optimizer import build_optimizer
 
 
 class PretrainTrainer:
@@ -52,7 +52,7 @@ class PretrainTrainer:
             seed=seed
         )
 
-        tokenizer = get_tokenizer(model_name)
+        tokenizer = build_optimizer(model_name)
         model_config = BertConfig.from_pretrained(model_name)
 
         if model_name.find('wwm') == -1:
@@ -94,35 +94,27 @@ class FinetuneTrainer:
             self.kl_loss = KLLoss(reduction='sum')
             self.model = ClsModel.from_pretrained(ptm_name)
 
-    def prepare_soft_label_data(self, rank, model, idx):
-        target_num = min(self.world_size * self.train_batch_size * self.update_interval * self.accum_steps,
-                         len(self.train_data["input_ids"]))
-        if idx + target_num >= len(self.train_data["input_ids"]):
-            select_idx = torch.cat((torch.arange(idx, len(self.train_data["input_ids"])),
-                                    torch.arange(idx + target_num - len(self.train_data["input_ids"]))))
-        else:
-            select_idx = torch.arange(idx, idx + target_num)
-        assert len(select_idx) == target_num
-        idx = (idx + len(select_idx)) % len(self.train_data["input_ids"])
-        select_dataset = {"input_ids": self.train_data["input_ids"][select_idx],
-                          "attention_masks": self.train_data["attention_masks"][select_idx]}
-        dataset_loader = self.make_dataloader(rank, select_dataset, self.eval_batch_size)
-        input_ids, input_mask, preds = self.inference(model, dataset_loader, rank, return_type="data")
-        gather_input_ids = [torch.ones_like(input_ids) for _ in range(self.world_size)]
-        gather_input_mask = [torch.ones_like(input_mask) for _ in range(self.world_size)]
-        gather_preds = [torch.ones_like(preds) for _ in range(self.world_size)]
-        dist.all_gather(gather_input_ids, input_ids)
-        dist.all_gather(gather_input_mask, input_mask)
-        dist.all_gather(gather_preds, preds)
-        input_ids = torch.cat(gather_input_ids, dim=0).cpu()
-        input_mask = torch.cat(gather_input_mask, dim=0).cpu()
-        all_preds = torch.cat(gather_preds, dim=0).cpu()
-        weight = all_preds ** 2 / torch.sum(all_preds, dim=0)
-        target_dist = (weight.t() / torch.sum(weight, dim=1)).t()
-        all_target_pred = target_dist.argmax(dim=-1)
-        agree = (all_preds.argmax(dim=-1) == all_target_pred).int().sum().item() / len(all_target_pred)
-        self_train_dict = {"input_ids": input_ids, "attention_masks": input_mask, "labels": target_dist}
-        return self_train_dict, idx, agree
+    def calc_q(self, data):
+        """
+
+        """
+        plabel = data['plabel']
+        plabel = torch.softmax(plabel, dim=-1)
+        f = torch.sum(plabel, dim=0)
+        # plabel[m, n], f[n]
+        q = (plabel ** 2 / f) / torch.sum((plabel ** 2 / f))
+
+        self.q = q
+
+    def calc_loss(self, logits):
+        """
+
+        """
+        logits = nn.Softmax(dim=-1)(logits)
+
+        loss = self.kl_loss(logits, self.q)
+
+        return loss
 
     def train(self, ptm_name, num_labels, data, output_path, x_col='text', y_col='label',
               batch_size=128, max_seq_len=128, model_type='cls', device='cuda',
@@ -162,12 +154,12 @@ class FinetuneTrainer:
             for batch in loader:
                 input_ids = batch['input_ids'].to(device)
                 attention_mask = batch['attention_mask'].to(device)
-                plabels = batch['plabels'].to(device)
                 labels = batch['labels'].to(device)
 
                 output = model(input_ids=input_ids, attention_mask=attention_mask)
 
-                loss = self.kl_loss(output, plabels)
+                # TODO: calculate self-label loss
+                loss = self.calc_loss(output)
 
                 optimizer.zero_grad()
                 loss.backward()
@@ -177,17 +169,11 @@ class FinetuneTrainer:
                 model.zero_grad()
                 global_steps += 1
 
-                # TODO: calculate
+                acc = torch.argmax(torch.softmax(output, dim=-1), dim=-1) == labels
 
-                acc = torch.argmax(torch.softmax(output[1], dim=-1), dim=-1) == labels
+                acc = acc.type(torch.float)
+                acc = torch.mean(acc)
 
-                if model_type == 'cls':
-                    acc = acc.type(torch.float)
-                    acc = torch.mean(acc)
-                else:
-                    acc = acc.type(torch.float)
-                    acc = torch.sum(acc * attention_mask)
-                    acc = acc / torch.sum(attention_mask)
                 bar.set_description('step:{} acc:{} loss:{} lr:{}'.format(
                     global_steps, round(acc.item(), 4), round(loss.item(), 4), round(scheduler.get_lr()[0], 7)))
 
@@ -217,11 +203,6 @@ class FinetuneTrainer:
 
                 labels = np.reshape(labels, [-1])
                 outputs = np.reshape(outputs, [-1])
-
-                if model_type == 'tag':
-                    used_index = labels > 0
-                    labels = labels[used_index]
-                    outputs = outputs[used_index]
 
                 met = multi_cls_metrics(labels, outputs, need_sparse=False, num_labels=num_labels)
                 acc = met['acc']
@@ -275,4 +256,4 @@ class FinetuneTrainer:
                 all_input_mask.append(input_mask)
                 all_preds.append(nn.Softmax(dim=-1)(logits))
 
-        return all_input_ids, all_input_mask, all_preds
+        return all_preds
