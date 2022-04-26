@@ -30,7 +30,7 @@ class ClsModel(BertPreTrainedModel):
                                  position_ids=position_ids,
                                  head_mask=head_mask,
                                  inputs_embeds=inputs_embeds)
-        out = bert_outputs[0]
+        out = bert_outputs[0][:, 0, :]
 #         trans_states = self.dense(last_hidden_states)
         out = self.activation(out)
 #         trans_states = self.dropout(trans_states)
