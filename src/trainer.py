@@ -124,8 +124,15 @@ class FinetuneTrainer:
         """
 
         """
-        loss = F.kl_div(logits.softmax(dim=-1).log(),
+        loss = F.kl_div(logits.softmax(dim=-1),
                         self.q[idx * self.batch_size: (idx + 1) * self.batch_size].softmax(dim=-1),
+                        reduction='batchmean')
+        # logging.info(f'loss {loss}')
+        return loss
+
+    def calc_loss1(self, logits, targets):
+        loss = F.kl_div(logits.softmax(dim=-1),
+                        targets.softmax(dim=-1),
                         reduction='batchmean')
         # logging.info(f'loss {loss}')
         return loss
@@ -180,12 +187,14 @@ class FinetuneTrainer:
             for idx, batch in enumerate(bar):
                 input_ids = batch['input_ids'].to(device)
                 attention_mask = batch['attention_mask'].to(device)
+                plabel = batch['plabel'].to(device)
                 labels = batch['labels'].to(device)
 
                 output = model(input_ids=input_ids, attention_mask=attention_mask)
 
                 # TODO: calculate self-label loss
-                loss = self.calc_loss(output, idx)
+                # loss = self.calc_loss(output, idx)
+                loss = self.calc_loss1(output, plabel)
 
                 optimizer.zero_grad()
                 loss.backward()
