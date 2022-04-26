@@ -27,6 +27,7 @@ from evaluate import multi_cls_metrics
 from dataset import ClsDataset
 from optimizer import build_optimizer
 import logging
+
 logging.basicConfig(format='%(asctime)s - %(pathname)s[line:%(lineno)d] - %(levelname)s: %(message)s',
                     level=logging.DEBUG)
 
@@ -115,14 +116,16 @@ class FinetuneTrainer:
         logging.info(f'min for class {torch.min(q, dim=0)}')
         logging.info(f'max for class {torch.max(q, dim=0)}')
 
-    def calc_loss(self, logits):
+    def calc_loss(self, logits, idx):
         """
 
         """
         logging.info('calc kl_div...')
         logits = nn.Softmax(dim=-1)(logits)
 
-        loss = F.kl_div(logits.softmax(dim=-1).log(), self.q.softmax(dim=-1), reduction='batchmean')
+        loss = F.kl_div(logits.softmax(dim=-1).log(),
+                        self.q[idx * self.batch_size: (idx + 1) * self.batch_size].softmax(dim=-1),
+                        reduction='batchmean')
 
         return loss
 
@@ -137,6 +140,7 @@ class FinetuneTrainer:
         self.calc_q(data)
 
         logging.info('start train')
+        self.batch_size = batch_size
         num_labels = self.num_labels
         tokenizer = self.tokenizer
         dataset = ClsDataset(data, tokenizer=tokenizer, max_seq_len=max_seq_len)
@@ -162,11 +166,12 @@ class FinetuneTrainer:
         total_loss = 0.0
         global_steps = 0
         global_acc = 0
-        bar = tqdm(range(1, epoch + 1))
-        for e in bar:
+        # bar = tqdm(range(1, epoch + 1))
+        for e in range(epoch):
+            logging.info(f'current epoch {e + 1}')
             model.train()
-
-            for batch in loader:
+            bar = tqdm(loader)
+            for idx, batch in enumerate(bar):
                 input_ids = batch['input_ids'].to(device)
                 attention_mask = batch['attention_mask'].to(device)
                 labels = batch['labels'].to(device)
@@ -174,7 +179,7 @@ class FinetuneTrainer:
                 output = model(input_ids=input_ids, attention_mask=attention_mask)
 
                 # TODO: calculate self-label loss
-                loss = self.calc_loss(output)
+                loss = self.calc_loss(output, idx)
 
                 optimizer.zero_grad()
                 loss.backward()
