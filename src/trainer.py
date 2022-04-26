@@ -111,6 +111,9 @@ class FinetuneTrainer:
         q = (plabel ** 2 / f) / torch.sum((plabel ** 2 / f))
 
         self.q = q
+        logging.info(f'mean for class {torch.mean(q, dim=0)}')
+        logging.info(f'min for class {torch.min(q, dim=0)}')
+        logging.info(f'max for class {torch.max(q, dim=0)}')
 
     def calc_loss(self, logits):
         """
