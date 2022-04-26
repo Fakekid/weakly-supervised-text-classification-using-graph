@@ -209,6 +209,7 @@ class FinetuneTrainer:
                 acc = acc.type(torch.float)
                 acc = torch.mean(acc)
                 accu_acc = (idx * batch_size * accu_acc + batch_size * acc) / ((idx + 1) * batch_size)
+
                 bar.set_description('step:{} acc:{} loss:{} lr:{}'.format(
                     global_steps, round(acc.item(), 4), round(loss.item(), 4), round(learning_rate * 1e6, 2)))
                 # bar.set_description('step:{} acc:{} loss:{} lr:{}'.format(
@@ -227,7 +228,7 @@ class FinetuneTrainer:
                     output = model(input_ids=input_ids, labels=labels_batch,
                                    token_type_ids=token_type_ids, attention_mask=attention_mask)
 
-                    output = output[1].cpu().detach().numpy()
+                    output = output.cpu().detach().numpy()
                     labels_batch = labels_batch.cpu().detach().numpy()
 
                     output = np.argmax(output, axis=-1)
@@ -246,11 +247,9 @@ class FinetuneTrainer:
 
                 table = PrettyTable(['global_steps',
                                      'loss',
-                                     'lr',
                                      'acc'])
                 table.add_row([global_steps + 1,
                                total_loss / (global_steps + 1),
-                               scheduler.get_lr()[0],
                                round(acc, 4)])
                 logging.info(table)
 

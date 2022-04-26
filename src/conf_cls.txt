@@ -2,6 +2,7 @@
     'num_labels': 4,
     'use_model': 'bert',
     'train_data_path': '/hy-nas/LOTClass/datasets/agnews/plabel_train.csv',
+    'test_data_path': '/hy-nas/LOTClass/datasets/agnews/test_data.csv',
     'output_path': 'fintune_plabel_model',
     'ptm_name': 'bert-base-chinese', 
     # 'ptm_name': '/hy-nas/bert_pretrain/mlm_model_agnews',  # your pretrain model path

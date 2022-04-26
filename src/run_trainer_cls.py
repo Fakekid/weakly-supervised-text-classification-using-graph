@@ -19,6 +19,7 @@ def main():
     print("\n>> loading model from :{}".format(config['ptm_name']))
 
     dataset = pd.read_csv(config['train_data_path'])
+    val_data = pd.read_csv(config['test_data_path'])
 
     if config['adv'] == '':
         print('\n>> start normal training ...')
@@ -29,7 +30,7 @@ def main():
 
     ft = FinetuneTrainer(ptm_name=config['ptm_name'], num_labels=config['num_labels'])
     ft.train(dataset, epoch=config['num_epochs'], output_path=config['output_path'], batch_size=config['batch_size'],
-             learning_rate=config['learning_rate'])
+             learning_rate=config['learning_rate'], val_data=val_data)
 
     localtime_end = time.asctime(time.localtime(time.time()))
     print("\n>> program end at:{}".format(localtime_end))

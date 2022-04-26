@@ -11,6 +11,7 @@ class ClsDataset(Dataset):
         self.text = df['text'].values
         if 'label' in df.columns:
             self.label = df['label'].values
+        if 'plabel' in df.columns:
             self.plabel = df['plabel'].values
 
     def __len__(self):
@@ -29,17 +30,15 @@ class ClsDataset(Dataset):
         input_ids = inputs['input_ids']
         attention_mask = inputs['attention_mask']
 
+        return_dict = {}
         if 'label' in self.df.columns:
             label = self.label[index]
+            return_dict['labels'] = torch.tensor(label, dtype=torch.long)
+        if 'plabel' in self.df.columns:
             plabel = [float(i) for i in self.plabel[index].split(',')]
+            return_dict['plabels'] = torch.tensor(plabel, dtype=torch.float)
 
-            return {
-                'input_ids': torch.tensor(input_ids, dtype=torch.long),
-                'attention_mask': torch.tensor(attention_mask, dtype=torch.long),
-                'labels': torch.tensor(label, dtype=torch.long),
-                'plabels': torch.tensor(plabel, dtype=torch.float)
-            }
-        return {
-            'input_ids': torch.tensor(input_ids, dtype=torch.long),
-            'attention_mask': torch.tensor(attention_mask, dtype=torch.long)
-        }
+        return_dict['input_ids'] = torch.tensor(input_ids, dtype=torch.long)
+        return_dict['attention_mask'] = torch.tensor(attention_mask, dtype=torch.long)
+
+        return return_dict
