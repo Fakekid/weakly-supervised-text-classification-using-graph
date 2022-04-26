@@ -5,7 +5,7 @@ import warnings
 
 import pandas as pd
 
-from .trainer import FinetuneTrainer
+from trainer import FinetuneTrainer
 
 
 def main():

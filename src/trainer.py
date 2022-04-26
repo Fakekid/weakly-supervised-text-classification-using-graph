@@ -14,7 +14,7 @@ from transformers import (
     DataCollatorForLanguageModeling,
     DataCollatorForWholeWordMask
 )
-from .loss import KLLoss
+from loss import KLLoss
 
 from tqdm import tqdm
 from prettytable import PrettyTable
