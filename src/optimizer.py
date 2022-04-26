@@ -26,7 +26,7 @@ def build_optimizer(model, train_steps, learning_rate, weight_decay, warmup_rati
          'weight_decay_rate': 0.0}
     ]
     optimizer = AdamW(optimizer_grouped_parameters, lr=learning_rate, eps=1e-8)
-    scheduler = WarmupLinearSchedule(optimizer, warmup_steps=train_steps * warmup_ratio,
-                                     t_total=train_steps)
+    # scheduler = WarmupLinearSchedule(optimizer, warmup_steps=train_steps * warmup_ratio,
+    #                                  t_total=train_steps)
 
-    return optimizer, scheduler
+    return optimizer

@@ -155,8 +155,8 @@ class FinetuneTrainer:
 
         model = self.model
 
-        optimizer, scheduler = build_optimizer(model, train_steps, learning_rate=learning_rate,
-                                               weight_decay=weight_decay, warmup_ratio=warmup_ratio)
+        optimizer = build_optimizer(model, train_steps, learning_rate=learning_rate,
+                                    weight_decay=weight_decay, warmup_ratio=warmup_ratio)
         model.to(device)
 
         total_loss = 0.0
