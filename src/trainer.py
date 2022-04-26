@@ -131,7 +131,7 @@ class FinetuneTrainer:
         return loss
 
     def calc_loss1(self, logits, targets):
-        loss = F.kl_div(logits.softmax(dim=-1),
+        loss = F.kl_div(logits.softmax(dim=-1).log(),
                         targets.softmax(dim=-1),
                         reduction='batchmean')
         # logging.info(f'loss {loss}')
