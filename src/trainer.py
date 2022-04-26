@@ -179,7 +179,6 @@ class FinetuneTrainer:
             # logging.info('calc q...')
             # self.calc_q(data)
 
-            logging.info('building dataset...')
             dataset = ClsDataset(data, tokenizer=tokenizer, max_seq_len=max_seq_len)
             loader = DataLoader(dataset, batch_size=batch_size)
 
