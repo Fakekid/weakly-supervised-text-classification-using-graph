@@ -222,11 +222,9 @@ class FinetuneTrainer:
                 for batch in loader_valid:
                     input_ids = batch['input_ids'].to(device)
                     attention_mask = batch['attention_mask'].to(device)
-                    token_type_ids = batch['token_type_ids'].to(device)
                     labels_batch = batch['labels'].to(device)
 
-                    output = model(input_ids=input_ids, labels=labels_batch,
-                                   token_type_ids=token_type_ids, attention_mask=attention_mask)
+                    output = model(input_ids=input_ids, labels=labels_batch, attention_mask=attention_mask)
 
                     output = output.cpu().detach().numpy()
                     labels_batch = labels_batch.cpu().detach().numpy()
