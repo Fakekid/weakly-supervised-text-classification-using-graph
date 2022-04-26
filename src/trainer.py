@@ -91,10 +91,11 @@ class FinetuneTrainer:
         for k, v in kwargs.items():
             print(f'设置 {k}={v}')
             exec(f'self.{k} = {v}')
-            self.kl_loss = KLLoss(reduction='sum')
-            self.model = ClsModel.from_pretrained(ptm_name, num_labels=num_labels)
-            self.num_labels = num_labels
-            self.tokenizer = AutoTokenizer.from_pretrained(ptm_name)
+        self.kl_loss = KLLoss(reduction='sum')
+        self.model = ClsModel.from_pretrained(ptm_name)
+        self.model._init_vars(num_labels)
+        self.num_labels = num_labels
+        self.tokenizer = AutoTokenizer.from_pretrained(ptm_name)
 
     def calc_q(self, data):
         """

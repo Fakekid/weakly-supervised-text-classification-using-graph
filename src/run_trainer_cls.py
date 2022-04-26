@@ -16,7 +16,7 @@ def main():
     warnings.filterwarnings('ignore')
     localtime_start = time.asctime(time.localtime(time.time()))
     print(">> program start at:{}".format(localtime_start))
-    print("\n>> loading model from :{}".format(config['model_path']))
+    print("\n>> loading model from :{}".format(config['ptm_name']))
 
     dataset = pd.read_csv(config['train_data_path'])
 
