@@ -27,7 +27,7 @@ from dataset import ClsDataset
 from optimizer import build_optimizer
 import logging
 logging.basicConfig(format='%(asctime)s - %(pathname)s[line:%(lineno)d] - %(levelname)s: %(message)s',
-                    level=logging.DEBUG)
+                    level=logging.INFO)
 
 
 class PretrainTrainer:
@@ -104,7 +104,7 @@ class FinetuneTrainer:
         """
 
         """
-        plabel = torch.FloatTensor(data['plabel'].values)
+        plabel = torch.FloatTensor(data['plabel'].str.split(',').apply(lambda x: [float(i) for i in x]).tolist())
         plabel = torch.softmax(plabel, dim=-1)
         f = torch.sum(plabel, dim=0)
         # plabel[m, n], f[n]
