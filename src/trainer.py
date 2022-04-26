@@ -112,7 +112,8 @@ class FinetuneTrainer:
         a = plabel ** 2 / f
         b = torch.sum((plabel ** 2 / f), dim=1)
         print(f'{a.size()}, {b.size()}')
-        q = a / b
+        q = a.transpose(1, 0) / b
+        q = q.transpose(1, 0)
 
         self.q = q.to('cuda')
         logging.info(f'mean for class {torch.mean(q, dim=0)}')
