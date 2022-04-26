@@ -106,14 +106,13 @@ class FinetuneTrainer:
 
         """
         plabel = torch.FloatTensor(data['plabel'].str.split(',').apply(lambda x: [float(i) for i in x]).tolist())
-        plabel = torch.softmax(plabel, dim=-1)
+        plabel = torch.softmax(plabel, dim=-1) + 1e-7
         f = torch.sum(plabel, dim=0)
         # plabel[m, n], f[n]
         a = plabel ** 2 / f
         b = torch.sum((plabel ** 2 / f), dim=1)
         print(f'{a.size()}, {b.size()}')
-        q = a.transpose() / b
-        q = q.transpose()
+        q = a / b
 
         self.q = q.to('cuda')
         logging.info(f'mean for class {torch.mean(q, dim=0)}')
