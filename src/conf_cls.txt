@@ -6,9 +6,9 @@
     'ptm_name': 'bert-base-chinese', 
     # 'ptm_name': '/hy-nas/bert_pretrain/mlm_model_agnews',  # your pretrain model path
     'task': 'cls',
-    'batch_size': 64,
-    'num_epochs': 3,
-    'max_seq_len': 32,
+    'batch_size': 128,
+    'num_epochs': 20,
+    'max_seq_len': 200,
     'kfold': 1,
     'learning_rate': 5e-5,
     'alpha': 0.3,
