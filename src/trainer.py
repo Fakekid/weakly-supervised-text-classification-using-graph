@@ -201,7 +201,7 @@ class FinetuneTrainer:
                 acc = torch.mean(acc)
 
                 bar.set_description('step:{} acc:{} loss:{} lr:{}'.format(
-                    global_steps, round(acc.item(), 4), round(loss.item(), 4), round(scheduler.get_lr()[0] * 1e5, 2)))
+                    global_steps, round(acc.item(), 4), round(loss.item(), 4), round(scheduler.get_lr()[0] * 1e6, 2)))
 
             if loader_valid is not None:
                 # 每个epoch结束进行验证集评估并保存模型
