@@ -183,6 +183,7 @@ class FinetuneTrainer:
             dataset = ClsDataset(data, tokenizer=tokenizer, max_seq_len=max_seq_len)
             loader = DataLoader(dataset, batch_size=batch_size)
 
+            accu_acc = 0
             bar = tqdm(loader)
             for idx, batch in enumerate(bar):
                 input_ids = batch['input_ids'].to(device)
@@ -208,7 +209,7 @@ class FinetuneTrainer:
 
                 acc = acc.type(torch.float)
                 acc = torch.mean(acc)
-
+                accu_acc = (idx * batch_size * accu_acc + batch_size * acc) / ((idx + 1) * batch_size)
                 bar.set_description('step:{} acc:{} loss:{} lr:{}'.format(
                     global_steps, round(acc.item(), 4), round(loss.item(), 4), round(learning_rate * 1e6, 2)))
                 # bar.set_description('step:{} acc:{} loss:{} lr:{}'.format(
