@@ -187,14 +187,14 @@ class FinetuneTrainer:
             for idx, batch in enumerate(bar):
                 input_ids = batch['input_ids'].to(device)
                 attention_mask = batch['attention_mask'].to(device)
-                plabel = batch['plabel'].to(device)
+                plabels = batch['plabels'].to(device)
                 labels = batch['labels'].to(device)
 
                 output = model(input_ids=input_ids, attention_mask=attention_mask)
 
                 # TODO: calculate self-label loss
                 # loss = self.calc_loss(output, idx)
-                loss = self.calc_loss1(output, plabel)
+                loss = self.calc_loss1(output, plabels)
 
                 optimizer.zero_grad()
                 loss.backward()
