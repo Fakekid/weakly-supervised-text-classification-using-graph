@@ -1,5 +1,5 @@
 {
-    'num_labels': 2,
+    'num_labels': 4,
     'use_model': 'bert',
     'train_data_path': '/hy-nas/LOTClass/datasets/agnews/plabel_train.csv',
     'output_path': 'fintune_plabel_model',
