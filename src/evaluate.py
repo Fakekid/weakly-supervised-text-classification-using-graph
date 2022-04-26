@@ -43,20 +43,21 @@ def multi_cls_metrics(labels, logits, average='micro', return_auc_when_multi_cls
         preds = preds[mask]
 
     acc = np.mean(preds == labels)
+    return {'acc': acc}
 
-    f1 = f1_score(labels, preds, average=average, zero_division=0, labels=all_labels)
-
-    p = precision_score(labels, preds, average=average, zero_division=0, labels=all_labels)
-    r = recall_score(labels, preds, average=average, zero_division=0, labels=all_labels)
-
-    if logits.shape[-1] > 2:
-        if return_auc_when_multi_cls is not None:
-            return {'auc': return_auc_when_multi_cls, 'acc': acc, 'f1': f1, 'p': p, 'r': r}
-        else:
-            return {'acc': acc, 'f1': f1, 'p': p, 'r': r}
-    else:
-        auc = roc_auc_score(labels, logits[:, 1], average=average)
-    return {'auc': auc, 'acc': acc, 'f1': f1, 'p': p, 'r': r}
+    # f1 = f1_score(labels, preds, average=average, zero_division=0, labels=all_labels)
+    #
+    # p = precision_score(labels, preds, average=average, zero_division=0, labels=all_labels)
+    # r = recall_score(labels, preds, average=average, zero_division=0, labels=all_labels)
+    #
+    # if logits.shape[-1] > 2:
+    #     if return_auc_when_multi_cls is not None:
+    #         return {'auc': return_auc_when_multi_cls, 'acc': acc, 'f1': f1, 'p': p, 'r': r}
+    #     else:
+    #         return {'acc': acc, 'f1': f1, 'p': p, 'r': r}
+    # else:
+    #     auc = roc_auc_score(labels, logits[:, 1], average=average)
+    # return {'auc': auc, 'acc': acc, 'f1': f1, 'p': p, 'r': r}
 
 
 evaluate = multi_cls_metrics
