@@ -109,7 +109,7 @@ class FinetuneTrainer:
         plabel = torch.softmax(plabel, dim=-1)
         f = torch.sum(plabel, dim=0)
         # plabel[m, n], f[n]
-        q = (plabel ** 2 / f) / torch.sum((plabel ** 2 / f))
+        q = (plabel ** 2 / f) / torch.sum((plabel ** 2 / f), dim=1)
 
         self.q = q.to('cuda')
         logging.info(f'mean for class {torch.mean(q, dim=0)}')
