@@ -216,10 +216,11 @@ class FinetuneTrainer:
                 #     global_steps, round(acc.item(), 4), round(loss.item(), 4), round(scheduler.get_lr()[0] * 1e6, 2)))
 
             if loader_valid is not None:
+                logging.info('now valid...')
                 # 每个epoch结束进行验证集评估并保存模型
                 labels = None
                 outputs = None
-                for batch in loader_valid:
+                for batch in tqdm(loader_valid):
                     input_ids = batch['input_ids'].to(device)
                     attention_mask = batch['attention_mask'].to(device)
                     labels_batch = batch['labels'].to(device)
