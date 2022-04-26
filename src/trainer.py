@@ -126,7 +126,7 @@ class FinetuneTrainer:
         loss = F.kl_div(logits.softmax(dim=-1).log(),
                         self.q[idx * self.batch_size: (idx + 1) * self.batch_size].softmax(dim=-1),
                         reduction='batchmean')
-
+        logging.info(f'loss {loss}')
         return loss
 
     def train(self, data, output_path,
