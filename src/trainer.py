@@ -25,6 +25,9 @@ from transformers import AutoTokenizer
 from evaluate import multi_cls_metrics
 from dataset import ClsDataset
 from optimizer import build_optimizer
+import logging
+logging.basicConfig(format='%(asctime)s - %(pathname)s[line:%(lineno)d] - %(levelname)s: %(message)s',
+                    level=logging.DEBUG)
 
 
 class PretrainTrainer:
@@ -126,6 +129,10 @@ class FinetuneTrainer:
         """
         训练模型
         """
+        logging.info('calc q...')
+        self.calc_q(data)
+
+        logging.info('start train')
         num_labels = self.num_labels
         tokenizer = self.tokenizer
         dataset = ClsDataset(data, tokenizer=tokenizer, max_seq_len=max_seq_len)
@@ -219,7 +226,7 @@ class FinetuneTrainer:
                                total_loss / (global_steps + 1),
                                scheduler.get_lr()[0],
                                round(acc, 4)])
-                print(table)
+                logging.info(table)
 
                 if global_acc < acc:
                     output_path_ = output_path
