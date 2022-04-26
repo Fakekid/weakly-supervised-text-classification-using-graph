@@ -19,12 +19,12 @@ from loss import KLLoss
 from tqdm import tqdm
 from prettytable import PrettyTable
 
-from .modules import ClsModel
+from modules import ClsModel
 from transformers import AutoTokenizer
 
-from .evaluate import multi_cls_metrics
-from .dataset import ClsDataset
-from .optimizer import build_optimizer
+from evaluate import multi_cls_metrics
+from dataset import ClsDataset
+from optimizer import build_optimizer
 
 
 class PretrainTrainer:
