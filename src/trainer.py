@@ -4,6 +4,7 @@ import os
 import numpy as np
 import torch
 from torch import nn
+import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from torch.backends import cudnn
 from transformers import (
@@ -27,7 +28,7 @@ from dataset import ClsDataset
 from optimizer import build_optimizer
 import logging
 logging.basicConfig(format='%(asctime)s - %(pathname)s[line:%(lineno)d] - %(levelname)s: %(message)s',
-                    level=logging.INFO)
+                    level=logging.DEBUG)
 
 
 class PretrainTrainer:
@@ -94,7 +95,6 @@ class FinetuneTrainer:
         for k, v in kwargs.items():
             print(f'设置 {k}={v}')
             exec(f'self.{k} = {v}')
-        self.kl_loss = KLLoss(reduction='sum')
         self.model = ClsModel.from_pretrained(ptm_name)
         self.model._init_vars(num_labels)
         self.num_labels = num_labels
@@ -119,9 +119,10 @@ class FinetuneTrainer:
         """
 
         """
+        logging.info('calc kl_div...')
         logits = nn.Softmax(dim=-1)(logits)
 
-        loss = self.kl_loss(logits, self.q)
+        loss = F.kl_div(logits.softmax(dim=-1).log(), self.q.softmax(dim=-1), reduction='batchmean')
 
         return loss
 
