@@ -2,6 +2,7 @@
 
 import os
 import numpy as np
+from sklearn.utils import shuffle
 import torch
 from torch import nn
 import torch.nn.functional as F
@@ -136,15 +137,10 @@ class FinetuneTrainer:
         """
         训练模型
         """
-        logging.info('calc q...')
-        self.calc_q(data)
-
         logging.info('start train')
         self.batch_size = batch_size
         num_labels = self.num_labels
         tokenizer = self.tokenizer
-        dataset = ClsDataset(data, tokenizer=tokenizer, max_seq_len=max_seq_len)
-        loader = DataLoader(dataset, batch_size=batch_size)
 
         loader_valid = None
         if val_data is not None:
@@ -154,7 +150,7 @@ class FinetuneTrainer:
         # 释放显存占用
         torch.cuda.empty_cache()
 
-        train_num = len(loader)
+        train_num = len(data) // batch_size + 1
         train_steps = int(train_num * epoch / batch_size) + 1
 
         model = self.model
@@ -166,10 +162,20 @@ class FinetuneTrainer:
         total_loss = 0.0
         global_steps = 0
         global_acc = 0
-        # bar = tqdm(range(1, epoch + 1))
         for e in range(epoch):
             logging.info(f'current epoch {e + 1}')
             model.train()
+
+            # shuffle data for each epoch
+            data = shuffle(data)
+
+            logging.info('calc q...')
+            self.calc_q(data)
+
+            logging.info('building dataset...')
+            dataset = ClsDataset(data, tokenizer=tokenizer, max_seq_len=max_seq_len)
+            loader = DataLoader(dataset, batch_size=batch_size)
+
             bar = tqdm(loader)
             for idx, batch in enumerate(bar):
                 input_ids = batch['input_ids'].to(device)
