@@ -104,7 +104,7 @@ class FinetuneTrainer:
         """
 
         """
-        plabel = data['plabel']
+        plabel = torch.FloatTensor(data['plabel'].values)
         plabel = torch.softmax(plabel, dim=-1)
         f = torch.sum(plabel, dim=0)
         # plabel[m, n], f[n]
