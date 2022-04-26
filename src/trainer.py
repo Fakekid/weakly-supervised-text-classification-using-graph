@@ -108,10 +108,9 @@ class FinetuneTrainer:
         plabel = torch.FloatTensor(data['plabel'].str.split(',').apply(lambda x: [float(i) for i in x]).tolist())
         plabel = torch.softmax(plabel, dim=-1) + 1e-7
         f = torch.sum(plabel, dim=0)
-        # plabel[m, n], f[n]
+        # plabel[m, n], f[n], b[m]
         a = plabel ** 2 / f
         b = torch.sum((plabel ** 2 / f), dim=1)
-        print(f'{a.size()}, {b.size()}')
         q = a.transpose(1, 0) / b
         q = q.transpose(1, 0)
 
@@ -124,8 +123,6 @@ class FinetuneTrainer:
         """
 
         """
-        logits = nn.Softmax(dim=-1)(logits)
-        # logging.info(f'logits {logits.size()}, q_batch {self.q[idx * self.batch_size: (idx + 1) * self.batch_size].softmax(dim=-1).size()}')
         loss = F.kl_div(logits.softmax(dim=-1).log(),
                         self.q[idx * self.batch_size: (idx + 1) * self.batch_size].softmax(dim=-1),
                         reduction='batchmean')
