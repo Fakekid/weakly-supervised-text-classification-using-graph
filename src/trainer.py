@@ -184,6 +184,8 @@ class FinetuneTrainer:
 
             accu_acc = 0
             bar = tqdm(loader)
+            all_preds = None
+            all_labels = None
             for idx, batch in enumerate(bar):
                 input_ids = batch['input_ids'].to(device)
                 attention_mask = batch['attention_mask'].to(device)
@@ -204,11 +206,21 @@ class FinetuneTrainer:
                 model.zero_grad()
                 global_steps += 1
 
-                acc = torch.argmax(torch.softmax(output, dim=-1), dim=-1) == labels
+                preds_batch = torch.argmax(torch.softmax(output, dim=-1), dim=-1).cpu().detach().numpy()
+                labels_batch = labels.cpu().detach().numpy()
+                if all_labels is None:
+                    all_labels = labels_batch
+                    all_preds = preds_batch
+                else:
+                    all_labels = np.concatenate([all_labels, labels_batch], axis=0)
+                    all_preds = np.concatenate([all_preds, preds_batch], axis=0)
 
-                acc = acc.type(torch.float)
-                acc = torch.mean(acc)
-                accu_acc = (idx * batch_size * accu_acc + batch_size * acc) / ((idx + 1) * batch_size)
+                acc = np.mean((all_labels == all_preds).astype('float32'))
+
+                # acc = torch.argmax(torch.softmax(output, dim=-1), dim=-1) == labels
+                # acc = acc.type(torch.float)
+                # acc = torch.mean(acc)
+                # accu_acc = (idx * batch_size * accu_acc + batch_size * acc) / ((idx + 1) * batch_size)
 
                 bar.set_description('step:{} acc:{} loss:{} lr:{}'.format(
                     global_steps, round(acc.item(), 4), round(loss.item(), 4), round(learning_rate * 1e6, 2)))
