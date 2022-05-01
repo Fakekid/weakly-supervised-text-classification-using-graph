@@ -1,7 +1,6 @@
 from transformers import BertPreTrainedModel, BertModel
 from transformers.models.bert.modeling_bert import BertOnlyMLMHead
 from torch import nn
-import sys
 
 
 class OurModel(BertPreTrainedModel):
@@ -9,10 +8,10 @@ class OurModel(BertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.bert = BertModel(config, add_pooling_layer=False)
-        self.token_cls = BertOnlyMLMHead(config)
+        self.token_cls = BertOnlyMLMHead(config)  # MLM Classifier
 
-        #         self.dropout = nn.Dropout(hidden_dropout_prob)
-        #         self.dense = nn.Linear(hidden_size, hidden_size)
+        # self.dropout = nn.Dropout(hidden_dropout_prob)
+        # self.dense = nn.Linear(hidden_size, hidden_size)
 
         self.init_weights()
 

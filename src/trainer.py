@@ -25,7 +25,7 @@ from modules import OurModel
 from transformers import AutoTokenizer
 
 from evaluate import multi_cls_metrics
-from dataset import ClsDataset
+from dataset import CLSDataset, MCPDataset
 from optimizer import build_optimizer
 import logging
 
@@ -33,73 +33,100 @@ logging.basicConfig(format='%(asctime)s - %(pathname)s[line:%(lineno)d] - %(leve
                     level=logging.DEBUG)
 
 
-class PretrainTrainer:
-    """
-
-    """
-
-    def __init__(self, **kwargs):
-        for k, v in kwargs.items():
-            print(f'设置 {k}={v}')
-            exec(f'self.{k} = {v}')
-
-    def train(self, model_name, data, mlm_rate=0.15, batch_size=None, epochs=None, learning_rate=None, save_steps=1000,
-              save_total_limit=5, max_seq_len=512, output_path=None,
-              prediction_loss_only=True, seed=None, logging_steps=100):
-        training_args = TrainingArguments(
-            output_dir=output_path,
-            num_train_epochs=epochs,
-            learning_rate=learning_rate,
-            per_device_train_batch_size=batch_size,
-            save_steps=save_steps,
-            logging_steps=logging_steps,
-            save_total_limit=save_total_limit,
-            prediction_loss_only=prediction_loss_only,
-            seed=seed
-        )
-
-        tokenizer = build_optimizer(model_name)
-        model_config = BertConfig.from_pretrained(model_name)
-
-        if model_name.find('wwm') == -1:
-            data_collator = DataCollatorForWholeWordMask(tokenizer=tokenizer,
-                                                         mlm=True,
-                                                         mlm_probability=mlm_rate)
-        else:
-
-            data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer,
-                                                            mlm=True,
-                                                            mlm_probability=mlm_rate)
-
-        dataset = ClsDataset(data, tokenizer=tokenizer, max_seq_len=max_seq_len)
-
-        model = BertForMaskedLM.from_pretrained(model_name, config=model_config)
-
-        trainer = Trainer(
-            # model=torch.nn.parallel.DistributedDataParallel(model),
-            model=model,
-            args=training_args,
-            data_collator=data_collator,
-            train_dataset=dataset
-        )
-
-        trainer.train()
-        trainer.save_model(output_path)
-        tokenizer.save_pretrained(output_path)
-
-
 class MLMTrainer:
     """
 
     """
+
     def __init__(self, ptm_name, num_labels, **kwargs):
         for k, v in kwargs.items():
             print(f'设置 {k}={v}')
             exec(f'self.{k} = {v}')
+        self.model = OurModel.from_pretrained(ptm_name, output_attentions=False, output_hidden_states=False,
+                                              num_labels=num_labels)
+        self.model._init_vars(num_labels)
+        self.num_labels = num_labels
+        self.tokenizer = AutoTokenizer.from_pretrained(ptm_name)
 
+    def calc_loss(self, logits, targets, mask=None):
+        if mask is None:
+            loss = F.kl_div(logits.softmax(dim=-1).log(),
+                            targets.softmax(dim=-1),
+                            reduction='batchmean')
+        else:
+            logits_ = torch.einsum('ijk,ij->ijk', logits.softmax(dim=-1).log(), mask)
+            targets_ = torch.einsum('ijk,ij->ijk', targets.softmax(dim=-1), mask)
+            loss = F.kl_div(logits_,
+                            targets_,
+                            reduction='batchmean')
+        # logging.info(f'loss {loss}')
+        return loss
 
-    def train(self):
-        pass
+    def train(self, data, output_path, batch_size=128, max_seq_len=128, device='cuda', weight_decay=0.01,
+              learning_rate=1e-5, warmup_ratio=0.1, val_data=None, epoch=10):
+        logging.info('start train')
+        self.batch_size = batch_size
+        num_labels = self.num_labels
+        tokenizer = self.tokenizer
+
+        loader_valid = None
+        if val_data is not None:
+            dataset_valid = MCPDataset(val_data, tokenizer=tokenizer, max_seq_len=max_seq_len)
+            loader_valid = DataLoader(dataset_valid, batch_size=batch_size)
+
+        # 释放显存占用
+        torch.cuda.empty_cache()
+
+        train_num = len(data) // batch_size + 1
+        train_steps = int(train_num * epoch / batch_size) + 1
+
+        model = self.model
+
+        optimizer = build_optimizer(model, train_steps, learning_rate=learning_rate,
+                                    weight_decay=weight_decay, warmup_ratio=warmup_ratio)
+        model.to(device)
+
+        total_loss = 0.0
+        global_steps = 0
+        global_acc = 0
+        for e in range(epoch):
+            logging.info(f'current epoch {e + 1}')
+            model.train()
+
+            # shuffle data for each epoch
+            data = shuffle(data)
+
+            # logging.info('calc q...')
+            # self.calc_q(data)
+
+            dataset = CLSDataset(data, tokenizer=tokenizer, max_seq_len=max_seq_len)
+            loader = DataLoader(dataset, batch_size=batch_size)
+
+            accu_acc = 0
+            bar = tqdm(loader)
+            all_preds = None
+            all_labels = None
+            for idx, batch in enumerate(bar):
+                input_ids = batch['input_ids'].to(device)
+                attention_mask = batch['attention_mask'].to(device)
+                plabels = batch['plabels'].to(device)
+                mask_place = batch['mask_place'].to(device)
+                labels = batch['labels'].to(device)
+
+                output = model(input_ids=input_ids, attention_mask=attention_mask)
+
+                # TODO: calculate self-label loss
+
+                loss = self.calc_loss(output, plabels, mask=mask_place)
+
+                optimizer.zero_grad()
+                loss.backward()
+                total_loss += loss.item()
+                optimizer.step()
+                # scheduler.step()
+                model.zero_grad()
+                global_steps += 1
+
 
 
 
@@ -135,7 +162,7 @@ class CLSTrainer:
         logging.info(f'min for class {torch.min(q, dim=0)}')
         logging.info(f'max for class {torch.max(q, dim=0)}')
 
-    def calc_loss(self, logits, idx):
+    def calc_soft_label_loss(self, logits, idx):
         """
 
         """
@@ -145,7 +172,7 @@ class CLSTrainer:
         # logging.info(f'loss {loss}')
         return loss
 
-    def calc_loss1(self, logits, targets):
+    def calc_loss(self, logits, targets):
         loss = F.kl_div(logits.softmax(dim=-1).log(),
                         targets.softmax(dim=-1),
                         reduction='batchmean')
@@ -166,7 +193,7 @@ class CLSTrainer:
 
         loader_valid = None
         if val_data is not None:
-            dataset_valid = ClsDataset(val_data, tokenizer=tokenizer, max_seq_len=max_seq_len)
+            dataset_valid = CLSDataset(val_data, tokenizer=tokenizer, max_seq_len=max_seq_len)
             loader_valid = DataLoader(dataset_valid, batch_size=batch_size)
 
         # 释放显存占用
@@ -194,7 +221,7 @@ class CLSTrainer:
             # logging.info('calc q...')
             # self.calc_q(data)
 
-            dataset = ClsDataset(data, tokenizer=tokenizer, max_seq_len=max_seq_len)
+            dataset = CLSDataset(data, tokenizer=tokenizer, max_seq_len=max_seq_len)
             loader = DataLoader(dataset, batch_size=batch_size)
 
             accu_acc = 0
@@ -211,7 +238,7 @@ class CLSTrainer:
 
                 # TODO: calculate self-label loss
                 # loss = self.calc_loss(output, idx)
-                loss = self.calc_loss1(output, plabels)
+                loss = self.calc_loss(output, plabels)
 
                 optimizer.zero_grad()
                 loss.backward()
@@ -319,3 +346,7 @@ class CLSTrainer:
                 all_preds.append(nn.Softmax(dim=-1)(logits))
 
         return all_preds
+
+
+if __name__ == '__main__':
+    a = MLMTrainer('bert-base-chinese', num_labels=2)
