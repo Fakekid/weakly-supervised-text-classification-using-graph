@@ -128,6 +128,13 @@ class MLMTrainer:
                 global_steps += 1
 
 
+        output_path_ = output_path
+        if not os.path.exists(output_path_):
+            os.mkdir(output_path_)
+        model_save_path = os.path.join(output_path_, f'finetune_model_{e}')
+        model_to_save = model.module if hasattr(model, 'module') else model
+
+        model_to_save.save_pretrained(model_save_path)
 
 
 class CLSTrainer:
