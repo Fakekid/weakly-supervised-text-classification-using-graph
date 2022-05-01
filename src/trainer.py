@@ -91,7 +91,7 @@ class MLMTrainer:
             loss = F.kl_div(logits_,
                             targets_,
                             reduction='batchmean')
-        # logging.info(f'loss {loss}')
+        logging.info(f'loss {loss}')
         return loss
 
     def train(self, data, output_path, batch_size=128, max_seq_len=128, device='cuda', weight_decay=0.01,
@@ -170,15 +170,8 @@ class MLMTrainer:
 
                 acc = np.mean((all_labels == all_preds).astype('float32'))
 
-                # acc = torch.argmax(torch.softmax(output, dim=-1), dim=-1) == labels
-                # acc = acc.type(torch.float)
-                # acc = torch.mean(acc)
-                # accu_acc = (idx * batch_size * accu_acc + batch_size * acc) / ((idx + 1) * batch_size)
-
                 bar.set_description('step:{} acc:{} loss:{} lr:{}'.format(
                     global_steps, round(acc.item(), 4), round(loss.item(), 4), round(learning_rate * 1e6, 2)))
-                # bar.set_description('step:{} acc:{} loss:{} lr:{}'.format(
-                #     global_steps, round(acc.item(), 4), round(loss.item(), 4), round(scheduler.get_lr()[0] * 1e6, 2)))
 
             if loader_valid is not None:
                 acc = assessment(loader_valid, model, device, num_labels)
