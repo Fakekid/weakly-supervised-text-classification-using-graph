@@ -33,6 +33,38 @@ logging.basicConfig(format='%(asctime)s - %(pathname)s[line:%(lineno)d] - %(leve
                     level=logging.DEBUG)
 
 
+def assessment(loader, model, device, num_labels):
+    logging.info('now valid...')
+    # 每个epoch结束进行验证集评估并保存模型
+    labels = None
+    outputs = None
+    for batch in tqdm(loader):
+        input_ids = batch['input_ids'].to(device)
+        attention_mask = batch['attention_mask'].to(device)
+        labels_batch = batch['labels'].to(device)
+
+        output = model(input_ids=input_ids, attention_mask=attention_mask)
+
+        output = output.cpu().detach().numpy()
+        labels_batch = labels_batch.cpu().detach().numpy()
+
+        output = np.argmax(output, axis=-1)
+        if labels is None:
+            labels = labels_batch
+            outputs = output
+        else:
+            labels = np.concatenate([labels, labels_batch], axis=0)
+            outputs = np.concatenate([outputs, output], axis=0)
+
+        labels = np.reshape(labels, [-1])
+        outputs = np.reshape(outputs, [-1])
+
+        met = multi_cls_metrics(labels, outputs, need_sparse=False, num_labels=num_labels)
+        acc = met['acc']
+
+        return acc
+
+
 class MLMTrainer:
     """
 
@@ -113,7 +145,7 @@ class MLMTrainer:
                 mask_place = batch['mask_place'].to(device)
                 labels = batch['labels'].to(device)
 
-                output = model(input_ids=input_ids, attention_mask=attention_mask)
+                output = model(input_ids=input_ids, attention_mask=attention_mask, pred_mode='mlm')
 
                 # TODO: calculate self-label loss
 
@@ -127,14 +159,55 @@ class MLMTrainer:
                 model.zero_grad()
                 global_steps += 1
 
+                preds_batch = torch.argmax(torch.softmax(output, dim=-1), dim=-1).cpu().detach().numpy()
+                labels_batch = labels.cpu().detach().numpy()
+                if all_labels is None:
+                    all_labels = labels_batch
+                    all_preds = preds_batch
+                else:
+                    all_labels = np.concatenate([all_labels, labels_batch], axis=0)
+                    all_preds = np.concatenate([all_preds, preds_batch], axis=0)
 
-        output_path_ = output_path
-        if not os.path.exists(output_path_):
-            os.mkdir(output_path_)
-        model_save_path = os.path.join(output_path_, f'finetune_model_{e}')
-        model_to_save = model.module if hasattr(model, 'module') else model
+                acc = np.mean((all_labels == all_preds).astype('float32'))
 
-        model_to_save.save_pretrained(model_save_path)
+                # acc = torch.argmax(torch.softmax(output, dim=-1), dim=-1) == labels
+                # acc = acc.type(torch.float)
+                # acc = torch.mean(acc)
+                # accu_acc = (idx * batch_size * accu_acc + batch_size * acc) / ((idx + 1) * batch_size)
+
+                bar.set_description('step:{} acc:{} loss:{} lr:{}'.format(
+                    global_steps, round(acc.item(), 4), round(loss.item(), 4), round(learning_rate * 1e6, 2)))
+                # bar.set_description('step:{} acc:{} loss:{} lr:{}'.format(
+                #     global_steps, round(acc.item(), 4), round(loss.item(), 4), round(scheduler.get_lr()[0] * 1e6, 2)))
+
+            if loader_valid is not None:
+                acc = assessment(loader_valid, model, device, num_labels)
+
+                table = PrettyTable(['global_steps',
+                                     'loss',
+                                     'acc'])
+                table.add_row([global_steps + 1,
+                               total_loss / (global_steps + 1),
+                               round(acc, 4)])
+                logging.info(table)
+
+                if global_acc < acc:
+                    output_path_ = output_path
+                    if not os.path.exists(output_path_):
+                        os.mkdir(output_path_)
+                    model_save_path = os.path.join(output_path_, 'finetune_model_best_acc')
+                    model_to_save = model.module if hasattr(model, 'module') else model
+
+                    model_to_save.save_pretrained(model_save_path)
+
+            else:
+                output_path_ = output_path
+                if not os.path.exists(output_path_):
+                    os.mkdir(output_path_)
+                model_save_path = os.path.join(output_path_, f'finetune_model_{e}')
+                model_to_save = model.module if hasattr(model, 'module') else model
+
+                model_to_save.save_pretrained(model_save_path)
 
 
 class CLSTrainer:
@@ -277,33 +350,34 @@ class CLSTrainer:
                 #     global_steps, round(acc.item(), 4), round(loss.item(), 4), round(scheduler.get_lr()[0] * 1e6, 2)))
 
             if loader_valid is not None:
-                logging.info('now valid...')
-                # 每个epoch结束进行验证集评估并保存模型
-                labels = None
-                outputs = None
-                for batch in tqdm(loader_valid):
-                    input_ids = batch['input_ids'].to(device)
-                    attention_mask = batch['attention_mask'].to(device)
-                    labels_batch = batch['labels'].to(device)
-
-                    output = model(input_ids=input_ids, attention_mask=attention_mask)
-
-                    output = output.cpu().detach().numpy()
-                    labels_batch = labels_batch.cpu().detach().numpy()
-
-                    output = np.argmax(output, axis=-1)
-                    if labels is None:
-                        labels = labels_batch
-                        outputs = output
-                    else:
-                        labels = np.concatenate([labels, labels_batch], axis=0)
-                        outputs = np.concatenate([outputs, output], axis=0)
-
-                labels = np.reshape(labels, [-1])
-                outputs = np.reshape(outputs, [-1])
-
-                met = multi_cls_metrics(labels, outputs, need_sparse=False, num_labels=num_labels)
-                acc = met['acc']
+                acc = assessment(loader_valid, model, device, num_labels)
+                # logging.info('now valid...')
+                # # 每个epoch结束进行验证集评估并保存模型
+                # labels = None
+                # outputs = None
+                # for batch in tqdm(loader_valid):
+                #     input_ids = batch['input_ids'].to(device)
+                #     attention_mask = batch['attention_mask'].to(device)
+                #     labels_batch = batch['labels'].to(device)
+                #
+                #     output = model(input_ids=input_ids, attention_mask=attention_mask)
+                #
+                #     output = output.cpu().detach().numpy()
+                #     labels_batch = labels_batch.cpu().detach().numpy()
+                #
+                #     output = np.argmax(output, axis=-1)
+                #     if labels is None:
+                #         labels = labels_batch
+                #         outputs = output
+                #     else:
+                #         labels = np.concatenate([labels, labels_batch], axis=0)
+                #         outputs = np.concatenate([outputs, output], axis=0)
+                #
+                # labels = np.reshape(labels, [-1])
+                # outputs = np.reshape(outputs, [-1])
+                #
+                # met = multi_cls_metrics(labels, outputs, need_sparse=False, num_labels=num_labels)
+                # acc = met['acc']
 
                 table = PrettyTable(['global_steps',
                                      'loss',
@@ -353,7 +427,3 @@ class CLSTrainer:
                 all_preds.append(nn.Softmax(dim=-1)(logits))
 
         return all_preds
-
-
-if __name__ == '__main__':
-    a = MLMTrainer('bert-base-chinese', num_labels=2)
