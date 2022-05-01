@@ -5,7 +5,7 @@ import warnings
 
 import pandas as pd
 
-from trainer import FinetuneTrainer
+from trainer import CLSTrainer
 
 
 def main():
@@ -28,7 +28,7 @@ def main():
     elif config['adv'] == 'pgd':
         print('\n>> start pgd training ...')
 
-    ft = FinetuneTrainer(ptm_name=config['ptm_name'], num_labels=config['num_labels'])
+    ft = CLSTrainer(ptm_name=config['ptm_name'], num_labels=config['num_labels'])
     ft.train(dataset, epoch=config['num_epochs'], output_path=config['output_path'], batch_size=config['batch_size'],
              learning_rate=config['learning_rate'], val_data=val_data)
 

@@ -21,7 +21,7 @@ from loss import KLLoss
 from tqdm import tqdm
 from prettytable import PrettyTable
 
-from modules import ClsModel
+from modules import OurModel
 from transformers import AutoTokenizer
 
 from evaluate import multi_cls_metrics
@@ -44,7 +44,7 @@ class PretrainTrainer:
             exec(f'self.{k} = {v}')
 
     def train(self, model_name, data, mlm_rate=0.15, batch_size=None, epochs=None, learning_rate=None, save_steps=1000,
-              save_total_limit=5, max_seq_len=512, x_col='text', output_path=None,
+              save_total_limit=5, max_seq_len=512, output_path=None,
               prediction_loss_only=True, seed=None, logging_steps=100):
         training_args = TrainingArguments(
             output_dir=output_path,
@@ -71,7 +71,7 @@ class PretrainTrainer:
                                                             mlm=True,
                                                             mlm_probability=mlm_rate)
 
-        dataset = ClsDataset(data, tokenizer=tokenizer, max_seq_len=max_seq_len, x_col=x_col)
+        dataset = ClsDataset(data, tokenizer=tokenizer, max_seq_len=max_seq_len)
 
         model = BertForMaskedLM.from_pretrained(model_name, config=model_config)
 
@@ -88,7 +88,22 @@ class PretrainTrainer:
         tokenizer.save_pretrained(output_path)
 
 
-class FinetuneTrainer:
+class MLMTrainer:
+    """
+
+    """
+    def __init__(self, ptm_name, num_labels, **kwargs):
+        for k, v in kwargs.items():
+            print(f'设置 {k}={v}')
+            exec(f'self.{k} = {v}')
+
+
+    def train(self):
+        pass
+
+
+
+class CLSTrainer:
     """
 
     """
@@ -97,7 +112,7 @@ class FinetuneTrainer:
         for k, v in kwargs.items():
             print(f'设置 {k}={v}')
             exec(f'self.{k} = {v}')
-        self.model = ClsModel.from_pretrained(ptm_name)
+        self.model = OurModel.from_pretrained(ptm_name)
         self.model._init_vars(num_labels)
         self.num_labels = num_labels
         self.tokenizer = AutoTokenizer.from_pretrained(ptm_name)
